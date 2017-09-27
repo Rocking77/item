@@ -1,0 +1,706 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>打灰机</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            list-style: none
+        }
+
+        html,
+        body {
+            width: 100%;
+            height: 100%;
+        }
+
+        #start_wrap {
+            width: 100%;
+            height: 100%;
+            background: url("img/start-background.png") 0 0 no-repeat;
+            background-size: 100% 100%;
+            position: absolute;
+            left: 0;
+            top: 0;
+        }
+
+        #loadingImg {
+            position: absolute;
+            left: 50%;
+            top: 60%;
+            width: 20%;
+            height: 10%;
+            transform: translate(-50%, -50%)
+        }
+
+        #start {
+            font-size: 30px;
+            position: absolute;
+            left: 50%;
+            top: 80%;
+            transform: translate(-50%, -50%);
+            background-color: #C3C8C9;
+            border: transparent;
+            outline: none;
+            display: none;
+        }
+
+        #gameover {
+            position: absolute;
+            font-size: 50px;
+            left: 20%;
+            top: 50%;
+            color: red;
+            font-family: monospace;
+            display: none
+        }
+
+        #tryAgain {
+            font-size: 40px;
+            position: absolute;
+            left: 30%;
+            top: 70%;
+            color: blue;
+            display: none
+        }
+
+        #bomb {
+            position: absolute;
+            right: 20px;
+            bottom: 20px;
+            width: 42px;
+            height: 36px;
+            background: url("img/bomb.png") 0 0 no-repeat;
+            text-align: right;
+            font-size: 20px;
+            color: red;
+            font-weight: bold;
+            display: none;
+        }
+        #scores {
+            position: absolute;
+            bottom: 33%;
+            left: 25%;
+            font-size: 30px;
+            color: green;
+            display: none
+        }
+    </style>
+</head>
+
+<body>
+    <div id="start_wrap">
+        <img src="img/loading.gif" id="loadingImg">
+        <button id="start">开始游戏</button>
+        <p id="gameover">Game Over</p>
+        <p id="tryAgain">再来一次</p>
+    </div>
+    <div id="bomb">
+        <span>2</span>
+    </div>
+    <div>
+        <p id="scores">本次得分:100</p>
+    </div>
+    <canvas id="myCanvas">不兼容canvas</canvas>
+
+</body>
+<script type="text/javascript">
+    var loadingImg = document.querySelector("#loadingImg")
+    var start = document.querySelector("#start")
+    var startWrap = document.querySelector("#start_wrap")
+    var canvas = document.querySelector("#myCanvas")
+    var gameover = document.getElementById('gameover')
+    var tryAgain = document.getElementById('tryAgain')
+    var bomb = document.getElementById('bomb')
+    var scores = document.getElementById('scores')
+    var context = canvas.getContext('2d')
+
+    // 获取屏幕的大小
+    var windowW = document.body.clientWidth
+    var windowH = document.body.clientHeight
+
+    canvas.width = windowW
+    canvas.height = windowH
+
+    // 帧数
+    var frame = 0
+    // 判断是多行还是单行子弹
+    var bulletBol = true
+    // 存放页面中的子弹对象
+    var bullets = []
+    // 存放所有的敌机
+    var enemies = []
+
+    //游戏结束
+    var gameOverBol = false
+    // 存放所有的道具
+    var props = []
+
+    // 当前分数
+    var score = 0
+    // 打掉的敌机
+    var score1 = 0
+    var score2 = 0
+    var score3 = 0
+
+    //无敌时间
+    var countdown = 0
+
+    // 是否停止绘制子弹
+    var bulletStop = false
+    // 是否能移动飞机
+    var canMove = true
+    // 是否无敌
+    var unbeatable = false
+
+    // 是否绘制无敌时间
+    var unbeatable_draw = false
+
+    //无敌时间
+    var unbeatableTime = 0
+
+    // 是否能够使用导弹
+    var allBomb = false
+
+    // 是否绝对隐藏导弹
+    var hide = false
+    function init(imgs) {
+        loadingImg.style.display = 'none'
+        start.style.display = 'block'
+        // 背景图片对象
+        var bgObj = {
+            img: imgs.background,
+            iY: 0,
+            move: function () {
+                this.iY += 2
+                if (this.iY > windowH) this.iY = 0
+            },
+            draw: function () {
+                this.move()
+                context.drawImage(this.img, 0, this.iY, windowW, windowH)
+                context.drawImage(this.img, 0, -windowH + this.iY, windowW, windowH)
+            }
+        }
+
+        // 玩家飞机对象
+        var herofly = {
+            img: imgs.herofly,
+            w: 66,
+            h: 82,
+            //  截取的位置（会变的）
+            iX: 0,
+            iY: 0,
+            endX: 264,
+            // 飞机出现的位置,也要随着玩家操控而改变
+            x: windowW / 2 - 66 / 2,
+            y: windowH - 132,
+            bombBol: false,
+            //  双排子弹的有效时间
+            propTime: 0,
+            propEndTime: 300,
+            //  玩家拥有炸弹的数量
+            bombNum: 0,
+            //  玩家出子弹的速度
+            bulletSpeed: 6,
+            //  人头的有效时间
+            headPropBol: false,
+            headPropTime: 0,
+            headPropEndTime: 420
+        }
+        // 飞机的移动
+        herofly.move = function (x, y) {
+            this.x = x
+            this.y = y
+        }
+        // 绘制飞机
+        herofly.draw = function () {
+            context.drawImage(this.img, this.iX, this.iY, this.w, this.h, this.x, this.y, this.w, this.h)
+            if (this.bombBol) {
+                if (frame % 15 === 0) {
+                    this.bomb()
+                }
+            }
+        }
+        //爆炸时切换图片
+        herofly.change = function () {
+            this.iX += this.w
+        }
+        //爆炸
+        herofly.bomb = function () {
+            this.change()
+            if (this.iX > this.endX) {
+                gameOverBol = true
+                end()
+            }
+        }
+
+        // 子弹对象(要很多的子弹,用构造函数)
+        function Bullet(x, y) {
+            // 子弹类型
+            this.img = (bulletBol ? imgs.bullet1 : imgs.bullet2)
+            // 子弹大小
+            this.w = this.img.width
+            this.h = this.img.height
+            // 子弹出现的位置
+            this.x = x + herofly.w / 2 - this.w / 2
+            this.y = y + 10
+            // 子弹的攻击力
+            this.atk = (bulletBol ? 1 : 2)
+        }
+
+        // 子弹的移动
+        Bullet.prototype.move = function () {
+            this.y -= this.h
+        }
+        // 子弹的绘制
+        Bullet.prototype.draw = function () {
+            this.move()
+            context.drawImage(this.img, this.x, this.y, this.w, this.h)
+        }
+
+        //敌机对象
+        function Enemy() {
+            var r = randomInt(0, 100)
+            //小飞机
+            if (r >= 0 && r < 60) {
+                this.img = imgs.enemy1
+                this.w = 38
+                this.h = 34
+                this.endX = 154
+                this.hp = 2
+                this.enemyId = 1
+                //飞机移动速度(随机)
+                this.speed = randomInt(3, 5)
+            } else if (r >= 60 && r < 90) {
+                //中飞机
+                this.img = imgs.enemy2
+                this.w = 46
+                this.h = 64
+                this.endX = 230
+                this.speed = randomInt(2, 3)
+                this.hp = 5
+                this.enemyId = 2
+            } else {
+                //大飞机
+                this.img = imgs.enemy3
+                this.w = 110
+                this.h = 164
+                this.endX = 880
+                this.speed = randomInt(1, 2)
+                this.hp = 9
+                this.enemyId = 3
+            }
+            //图片的截取位置
+            this.iX = 0
+            this.iY = 0
+            //敌机出现位置
+            this.x = randomInt(0, windowW - this.w)
+            this.y = randomInt(3 * -this.h, -this.h)
+            //是否要爆炸
+            this.bombBol = false
+        }
+
+        //敌机的移动
+        Enemy.prototype.move = function () {
+            if (this.hp > 0) this.y += this.speed
+        }
+        //敌机的绘制
+        Enemy.prototype.draw = function () {
+            this.move()
+            context.drawImage(this.img, this.iX, this.iY, this.w, this.h, this.x, this.y, this.w,
+                this.h)
+            //判断是否执行爆炸
+            if (this.bombBol) {
+                if (frame % 5 === 0) {
+                    return this.bomb()
+                }
+            }
+        }
+        //敌机扣血
+        Enemy.prototype.downHp = function (atk) {
+            this.hp -= atk
+            if (this.hp <= 0) {
+                //没血了,爆炸
+                this.bombBol = true
+            }
+        }
+        //敌机的爆炸
+        Enemy.prototype.bomb = function () {
+            this.iX += this.w
+            if (this.iX > this.endX) {
+                if (this.enemyId == 1) {
+                    score++
+                    score1++
+                } else if (this.enemyId == 2) {
+                    score += 3
+                    score2++
+                } else {
+                    score += 10
+                    score3++
+                }
+                //爆炸完成,将此敌机从enemies数组中删除
+                for (var i = 0; i < enemies.length; i++) {
+                    if (this == enemies[i]) {
+                        enemies.splice(i, 1)
+                        //向主函数发送此敌机已经被删除的消息
+                        return true
+                    }
+                }
+            }
+        }
+
+        //道具对象
+        function Prop() {
+            this.img = imgs.prop
+            this.w = 39
+            this.h = 68
+            this.x = randomInt(0, windowW - this.w)
+            this.y = -this.h
+            this.iY = 0
+            var r = randomInt(0, 100)
+            if (r >= 0 && r < 50) {
+                //道具2(双排子弹)
+                this.speed = randomInt(3, 5)
+                this.iX = 39
+                this.propId = 2
+            } else if (r >= 50 && r < 80) {
+                //道具1(导弹)
+                this.speed = randomInt(4, 6)
+                this.iX = 0
+                this.propId = 1
+            } else {
+                //道具3(人头)
+                this.speed = randomInt(5, 7)
+                this.iX = 78
+                this.propId = 3
+            }
+        }
+
+        Prop.prototype.move = function () {
+            this.y += this.speed
+        }
+        Prop.prototype.draw = function () {
+            this.move()
+            context.drawImage(this.img, this.iX, this.iY, this.w, this.h, this.x,
+                this.y, this.w, this.h)
+        }
+
+        start.addEventListener('touchstart', function () {
+            startWrap.style.display = 'none'
+            // 手指控制飞机的移动
+            document.addEventListener('touchstart', function () {
+                // 获取手指按下的位置
+                var touchObj = event.touches[0]
+                var touchX = touchObj.clientX
+                var touchY = touchObj.clientY
+
+                // 获取手指与飞机绘制位置的距离
+                var disX = touchX - herofly.x
+                var disY = touchY - herofly.y
+
+                // 判断手指是否按下了飞机
+                if (touchX > herofly.x && touchX < herofly.y + herofly.w && touchY > herofly.y && touchY < herofly.y + herofly.h) {
+                    function touchMove() {
+                        var touchObj = event.touches[0]
+                        var nx = touchObj.clientX - disX
+                        var ny = touchObj.clientY - disY
+                        if (nx <= 0) nx = 0
+                        if (nx >= windowW - herofly.w) {
+                            nx = windowW - herofly.w
+                        }
+                        if (ny <= 0) ny = 0
+                        if (ny >= windowH - herofly.h) {
+                            ny = windowH - herofly.h
+                        }
+                        if (canMove) herofly.move(nx, ny)
+                    }
+
+                    document.addEventListener('touchmove', touchMove, false)
+                    document.addEventListener('touchend', function () {
+                        document.removeEventListener('touchmove', touchMove)
+                    }, false)
+
+                }
+
+            }, false)
+
+            function main() {
+                frame++
+
+                // 绘制背景
+                bgObj.draw()
+
+                // 绘制玩家飞机
+                herofly.draw()
+
+                // 绘制子弹
+                if (frame % herofly.bulletSpeed === 0) {
+                    if (!bulletStop) {
+                        var bulletObj = new Bullet(herofly.x, herofly.y)
+                        bullets.push(bulletObj)
+                    }
+                }
+                for (var i = 0; i < bullets.length; i++) {
+                    if (bullets[i].y < -bullets[i].h) {
+                        bullets.splice(i, 1)
+                        i--
+                        continue
+                    }
+                    bullets[i].draw()
+                }
+
+                // 创建敌机对象
+                if (frame % 30 === 0) {
+                    var enemyObj = new Enemy()
+                    enemies.push(enemyObj)
+                }
+                //绘制敌机
+                for (var i = 0; i < enemies.length; i++) {
+                    if (enemies[i].y > windowH + 50) {
+                        enemies.splice(i, 1)
+                        i--
+                        continue
+                    }
+                    var bol = enemies[i].draw()
+                    if (bol) i--
+                }
+
+                //子弹打中敌机
+                for (var i = 0; i < enemies.length; i++) {
+                    for (var j = 0; j < bullets.length; j++) {
+                        if (isHit(bullets[j], enemies[i])) {
+                            //敌机扣血
+                            enemies[i].downHp(bullets[j].atk)
+                            //子弹消失
+                            bullets.splice(j, 1)
+                            j--
+                            break
+                        }
+                    }
+                }
+
+                //玩家飞机被敌机撞到
+                for (var i = 0; i < enemies.length; i++) {
+                    if (isHit(herofly, enemies[i])) {
+                        if (!unbeatable) {
+                            canMove = false
+                            bulletStop = true
+                            herofly.bombBol = true
+                        }
+                    }
+                }
+
+                //创建道具
+                if (frame % 200 === 0) {
+                    var propObj = new Prop()
+                    props.push(propObj)
+                }
+
+                //绘制道具
+                for (var i = 0; i < props.length; i++) {
+                    if (props[i].y > windowH) {
+                        props.splice(i, 1)
+                        i--
+                        continue
+                    }
+                    props[i].draw()
+                }
+
+                //玩家飞机接到道具
+                for (var i = 0; i < props.length; i++) {
+                    if (isHit(herofly, props[i])) {
+                        switch (props[i].propId) {
+                            case 2:
+                                // 双排
+                                herofly.propTime = 0
+                                bulletBol = false
+                                break
+                            case 1:
+                                // 炸弹
+                                herofly.bombNum++
+                                break
+                            case 3:
+                                // 人头
+                                herofly.bulletSpeed = 3
+                                countdown += 7
+                                allBomb = true
+                                unbeatable_draw = true
+                                herofly.headPropBol = true
+                                break
+                        }
+                        props.splice(i, 1)
+                        i--
+                    }
+                }
+
+                // 控制双排子弹的有效时间
+                if (!bulletBol) {
+                    herofly.propTime++
+                    if (herofly.propTime > herofly.propEndTime) {
+                        herofly.propTime = 0
+                        bulletBol = true
+                    }
+                }
+
+                // 控制人头的有效时间
+                if (herofly.headPropBol) {
+                    herofly.headPropTime++
+                    if (herofly.headPropTime > herofly.headPropEndTime) {
+                        herofly.headPropTime = 0
+                        herofly.bulletSpeed = 6
+                        herofly.headPropBol = false
+                    }
+                }
+                // 是否显示炸弹
+                if (herofly.bombNum > 0) {
+                    if (!hide) {
+                        bomb.innerHTML = herofly.bombNum
+                        bomb.style.display = "block"
+                    }
+                } else {
+                    bomb.style.display = "none"
+                }
+                //  接到道具3后全屏爆炸,变成双排子弹
+                if (allBomb) {
+                    for (var i = 0; i < enemies.length; i++) {
+                        enemies[i].downHp(10000)
+                    }
+
+                    bulletBol = false
+                    allBomb = false
+                }
+
+                // 绘制无敌时间
+                if (countdown > 0) {
+                    unbeatable = true
+                    unbeatableTime++
+                    if (unbeatableTime % 60 === 0) countdown--
+                    unbeatable_draw = true
+                    context.font = '25px sans-serif'
+                    context.fillText(`无敌时间:${countdown}秒`, 20, 170)
+                } else {
+                    unbeatable = false
+                }
+
+                //绘制分数
+                context.font = '40px sans-serif';
+                context.fillText(`当前分数:${score}`, 20, 40)
+                context.font = '25px sans-serif';
+                context.fillText(`小敌机:${score1} 中敌机:${score2} 大敌机:${score3}`, 5, 100)
+                if (frame > 10000) frame = 0
+                if (!gameOverBol) {
+                    requestAnimationFrame(main)
+                }
+            }
+
+            main()
+        }, false)
+
+        // 给炸弹按钮添加点击事件
+        bomb.addEventListener('touchstart', function () {
+            herofly.bombNum--
+            // 所有的敌机爆炸
+            allBomb = true
+        }, false)
+    }
+
+
+    // loading预加载(由于异步加载,所以外面没法拿到值,必须通过回调),用loading实现
+
+    loading({
+        imgs: {
+            background: 'img/background.png',
+            bomb: 'img/bomb.png',
+            bullet1: 'img/bullet1.png',
+            bullet2: 'img/bullet2.png',
+            enemy1: 'img/enemy1.png',
+            enemy2: 'img/enemy2.png',
+            enemy3: 'img/enemy3.png',
+            herofly: 'img/herofly.png',
+            prop: 'img/prop.png'
+        },
+        /* 回调以获取数据 */
+        // 监听进度
+        prog: function (num) {
+            console.log(num)
+        },
+        complete: function (imgs) {
+            init(imgs)
+        }
+    })
+
+    /*
+     loading: 用于加载图片
+     @imgs: 要加载的图片对象 必填参数
+     @prop: 进度的回调      可选
+     @complete: 完成的回调  可选
+     */
+    function loading(obj) {
+
+        // 用于存放加载完成的图片
+        var loadedObj = {}
+        // 用于存储已经加载完成的图片数量
+        var loadedNum = 0
+        var len = 0
+        for (var i in obj.imgs) {
+            len++
+        }
+
+        for (var i in obj.imgs) {
+            var imgObj = new Image()
+            imgObj.src = obj.imgs[i]
+            imgObj.key = i
+            imgObj.onload = function () {
+                loadedObj[this.key] = this
+                loadedNum++
+                // 每次加载一张图片都会调用
+                if (obj.prog) {
+                    obj.prog(parseInt((loadedNum / len).toFixed(2) * 100))
+                }
+                if (loadedNum >= len) {
+                    if (obj.complete) {
+                        obj.complete(loadedObj)
+                    }
+                }
+            }
+        }
+    }
+
+    // 判断子弹是否打到了敌机 || 敌机是否撞到了玩家的飞机
+    function isHit(obj1, obj2) {
+        if (obj1.x + obj1.w < obj2.x || obj1.x > obj2.x + obj2.w || obj1.y + obj1.h < obj2.y || obj1.y > obj2.y + obj2.h) {
+            return false
+        } else {
+            return true
+        }
+    }
+    // 游戏结束界面
+    function end() {
+        canvas.style.display = 'none'
+        startWrap.style.display = 'block'
+        start.style.display = 'none'
+        gameover.style.display = 'block'
+        tryAgain.style.display = 'block'
+        bomb.style.display = 'none'
+        scores.innerHTML = `本次得分: ${score}分`
+        scores.style.display = 'block'
+        hide = true
+    }
+
+    tryAgain.addEventListener('touchstart', function () {
+        window.location.reload()
+    })
+
+    // 随机整数
+    function randomInt(from, to) {
+        return parseInt(Math.random() * (to - from + 1) + from)
+    }
+
+</script>
+
+</html>
